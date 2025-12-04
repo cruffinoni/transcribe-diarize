@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asr-cli"
+version = "0.1.0"
+description = "CLI for Whisper transcription with pyannote diarization."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "ASR CLI", email = "noreply@example.com" },
+]
+dependencies = [
+  "torch>=2.0.0",
+  "torchaudio>=2.0.0",
+  "openai-whisper>=20231117",
+  "pyannote.audio>=3.1.1",
+  "huggingface_hub>=0.20.0",
+  "click>=8.1",
+]
+
+[project.scripts]
+transcribe_diarize = "asr_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["asr_cli"]

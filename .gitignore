@@ -1,0 +1,14 @@
+# Virtualenvs / Python
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Editors/IDE
+.idea/
+
+# Outputs
+medias/
+out/
+
+# macOS
+.DS_Store
