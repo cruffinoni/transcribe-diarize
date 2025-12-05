@@ -19,3 +19,6 @@ out/
 
 # local test logs
 test-out*.txt
+
+# pytest cache
+.pytest_cache/

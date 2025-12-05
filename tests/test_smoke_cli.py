@@ -41,6 +41,7 @@ def test_cli_smoke(tmp_path):
         sys.executable,
         "-m",
         "asr_cli.cli",
+        "full",
         str(input_wav),
         "--model",
         "tiny",
