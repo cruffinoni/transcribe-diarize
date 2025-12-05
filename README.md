@@ -6,6 +6,7 @@ CLI tool for end-to-end transcription and speaker diarization using OpenAI Whisp
 - Python 3.9+
 - `ffmpeg` available on PATH (e.g., `brew install ffmpeg` or `apt install ffmpeg`)
 - Hugging Face token with accepted terms for `pyannote/speaker-diarization-3.1`
+- `rich` is installed with the package and is required for progress display
 
 ## Installation
 ```bash
@@ -23,6 +24,8 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+While running, the CLI shows progress for each step (audio extraction, Whisper load/transcription, diarization, exports) with a spinner when `rich` is available, otherwise via INFO logs.
 
 ## Quickstart
 macOS / Apple Silicon (auto uses MPS when available):

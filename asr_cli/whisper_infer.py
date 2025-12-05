@@ -40,7 +40,14 @@ def load_whisper(model_name: str, device: str):
 
 
 def run_whisper(model, wav_path: Path, language: Optional[str]) -> Dict:
-    opts = {"beam_size": 1}  # lower beam size for speed
+    device = str(getattr(model, "device", "cpu"))
+    opts = {
+        "beam_size": 1,  # lower beam size for speed
+        "verbose": False,  # enable tqdm progress bar instead of silent default
+    }
+    if device.startswith("cpu"):
+        # Avoid Whisper warning: "FP16 is not supported on CPU; using FP32 instead"
+        opts["fp16"] = False
     if language:
         opts["language"] = language
     logging.info("Running Whisper transcription...")

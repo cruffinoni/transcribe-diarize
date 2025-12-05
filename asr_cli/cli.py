@@ -6,7 +6,7 @@ from typing import Optional, Set
 import click
 
 from . import audio, diarization, export, speakers, whisper_infer
-from .utils import fatal, setup_logging
+from .utils import fatal, setup_logging, step_status
 
 
 VALID_FORMATS: Set[str] = {"srt", "txt", "json", "rttm", "dialog"}
@@ -144,15 +144,21 @@ def run_pipeline(
 
     with tempfile.TemporaryDirectory() as tmpd:
         wav_path = Path(tmpd) / "audio_16k.wav"
-        audio.extract_wav(in_path, wav_path)
+        with step_status("Extracting audio (ffmpeg)"):
+            audio.extract_wav(in_path, wav_path)
 
-        w_model = whisper_infer.load_whisper(model, whisper_dev)
-        wres = whisper_infer.run_whisper(w_model, wav_path, language)
+        with step_status(f"Loading Whisper model '{model}' on {whisper_dev}"):
+            w_model = whisper_infer.load_whisper(model, whisper_dev)
+        # Disable spinner to avoid clashing with Whisper's tqdm progress bar
+        with step_status("Running Whisper transcription", spinner=False):
+            wres = whisper_infer.run_whisper(w_model, wav_path, language)
         w_segments = wres.get("segments", [])
         duration = float(w_segments[-1]["end"]) if w_segments else 0.0
 
-        pipeline = diarization.load_pyannote(hf_token)
-        diarization.send_pipeline_to_device(pipeline, diar_dev)
+        with step_status("Loading diarization pipeline"):
+            pipeline = diarization.load_pyannote(hf_token)
+        with step_status(f"Moving diarization pipeline to {diar_dev}"):
+            diarization.send_pipeline_to_device(pipeline, diar_dev)
 
         diar_kw = {}
         if num_speakers is not None:
@@ -163,7 +169,8 @@ def run_pipeline(
             if max_speakers is not None:
                 diar_kw["max_speakers"] = int(max_speakers)
 
-        diar = diarization.run_diarization(pipeline, wav_path, diar_kw)
+        with step_status("Running diarization"):
+            diar = diarization.run_diarization(pipeline, wav_path, diar_kw)
 
     enriched = []
     for seg in w_segments:
