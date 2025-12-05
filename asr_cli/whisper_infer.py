@@ -1,7 +1,11 @@
+import hashlib
+import json
 import logging
 import os
+import re
+import shutil
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import whisper
 
@@ -52,3 +56,69 @@ def run_whisper(model, wav_path: Path, language: Optional[str]) -> Dict:
         opts["language"] = language
     logging.info("Running Whisper transcription...")
     return model.transcribe(str(wav_path), **opts)
+
+
+def _fingerprint_file(path: Path) -> str:
+    """
+    Compute a SHA256 fingerprint of the audio file so we can cache and reuse
+    Whisper results safely.
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _safe_tag(value: str) -> str:
+    """Make a string safe to use in filenames."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", value)
+
+
+def export_whisper_cache(
+    whisper_result: Dict,
+    wav_path: Path,
+    out_dir: Path,
+    base_name: str,
+    model: str,
+    device: str,
+    language: Optional[str],
+    source_path: Optional[Path] = None,
+) -> Tuple[Path, Path, str]:
+    """
+    Persist Whisper output and the normalized audio alongside a fingerprint.
+
+    Returns: (json_path, audio_path, fingerprint)
+    """
+    fingerprint = _fingerprint_file(wav_path)
+    model_tag = _safe_tag(model)
+    fp_tag = fingerprint[:12]
+
+    json_path = out_dir / f"{base_name}.{model_tag}.{fp_tag}.whisper.json"
+    audio_path = out_dir / f"{base_name}.{model_tag}.{fp_tag}.audio.wav"
+
+    shutil.copy2(wav_path, audio_path)
+
+    payload = {
+        "metadata": {
+            "whisper_model": model,
+            "whisper_device": str(device),
+            "language": language,
+            "audio_fingerprint_sha256": fingerprint,
+            "cached_audio": str(audio_path),
+        },
+        "result": whisper_result,
+    }
+    if source_path:
+        payload["metadata"]["input_file"] = str(source_path)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    logging.info(
+        "Cached Whisper output and audio: %s , %s (fingerprint=%s)",
+        json_path.name,
+        audio_path.name,
+        fp_tag,
+    )
+
+    return json_path, audio_path, fingerprint
