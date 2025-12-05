@@ -1,11 +1,13 @@
 import json
 import logging
+import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 import click
+from dotenv import load_dotenv
 
 from . import audio, diarization, export, speakers, whisper_infer
 from .utils import fatal, setup_logging, step_status
@@ -56,6 +58,19 @@ def _build_diar_kwargs(
     ):
         fatal("--min-speakers cannot be greater than --max-speakers.")
     return kwargs
+
+
+def _resolve_hf_token(token: Optional[str]) -> Optional[str]:
+    if token:
+        return token.strip()
+    env_token = (
+        os.environ.get("HF_TOKEN")
+        or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+        or ""
+    ).strip()
+    if env_token:
+        logging.info("Using HF token from environment.")
+    return env_token or None
 
 
 def _ensure_out_dir(out_dir: Optional[Path], fallback: Path) -> Path:
@@ -248,6 +263,7 @@ def full(
 ) -> None:
     """Run the full pipeline: extract audio -> Whisper -> diarization -> exports."""
     setup_logging(log_level)
+    hf_token = _resolve_hf_token(hf_token)
     try:
         _run_full_pipeline(
             input,
@@ -499,6 +515,7 @@ def diarize(
 ) -> None:
     """Run diarization using an existing Whisper cache + audio, then export outputs."""
     setup_logging(log_level)
+    hf_token = _resolve_hf_token(hf_token)
     try:
         _run_diarization_only(
             whisper_cache,
@@ -674,6 +691,7 @@ def cache_info(whisper_cache: Path, log_level: str) -> None:
 
 
 def main(argv: Optional[List[str]] = None) -> None:
+    load_dotenv(override=False)
     cli.main(args=argv, prog_name="transcribe_diarize")
 
 

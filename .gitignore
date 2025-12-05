@@ -15,6 +15,7 @@ out/
 
 # venv
 .venv
+.env
 
 # local test logs
 test-out*.txt
