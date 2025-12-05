@@ -12,3 +12,9 @@ out/
 
 # macOS
 .DS_Store
+
+# venv
+.venv
+
+# local test logs
+test-out*.txt
