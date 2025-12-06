@@ -1,12 +1,16 @@
 import logging
 from typing import Dict, List, Set
 
-from pyannote.core import Segment
-
 from .export import format_hhmmss
+from .utils import fatal
 
 
 def best_speaker(diarization, start: float, end: float) -> str:
+    try:
+        from pyannote.core import Segment
+    except Exception as exc:  # pragma: no cover - optional dependency might be missing
+        fatal(f"pyannote.core is unavailable; cannot assign speakers. Details: {exc}")
+
     window = Segment(start, end)
     overlap_by_label: Dict[str, float] = {}
     for seg, _, label in diarization.itertracks(yield_label=True):

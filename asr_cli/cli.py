@@ -741,6 +741,9 @@ def cache_info(whisper_cache: Path, log_level: str) -> None:
 
 
 def main(argv: Optional[List[str]] = None) -> None:
+    # Best-effort warning if pyannote cannot be imported; keep CLI usable for
+    # Whisper-only commands/help even on hosts with incompatible torchaudio.
+    diarization.probe_pyannote_available()
     load_dotenv(override=False)
     cli.main(args=argv, prog_name="asr-mps")
 

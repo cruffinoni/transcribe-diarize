@@ -1,10 +1,9 @@
 import contextlib
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import torch
-from pyannote.audio import Pipeline
 
 try:  # torch >= 2.6 adds weights_only default; allowlist TorchVersion for pyannote checkpoints
     from torch.serialization import add_safe_globals as _add_safe_globals
@@ -13,30 +12,82 @@ except ImportError:  # pragma: no cover - older torch
     _add_safe_globals = None
     _safe_globals = None
 
-try:
-    from pyannote.audio.core.task import Specifications as _PyannoteSpecifications
-    from pyannote.audio.core.task import Problem as _PyannoteProblem
-    from pyannote.audio.core.task import Resolution as _PyannoteResolution
-except Exception:  # pragma: no cover - defensive: if module path changes
-    _PyannoteSpecifications = None
-    _PyannoteProblem = None
-    _PyannoteResolution = None
-
 from .devices import resolve_device as _resolve_device
 from .utils import fatal
+
+_PYANNOTE_IMPORT_ERROR: Optional[Exception] = None
 
 
 def resolve_device(requested: str) -> str:
     return _resolve_device(requested, label="Diarization")
 
 
-def load_pyannote(hf_token: Optional[str]) -> Pipeline:
+def _import_pyannote_pipeline():
+    """
+    Import pyannote Pipeline lazily so commands that don't need diarization
+    don't crash if pyannote/torchaudio is unavailable. Cache the first error
+    to avoid repeated import attempts.
+    """
+    global _PYANNOTE_IMPORT_ERROR
+    if _PYANNOTE_IMPORT_ERROR is not None:
+        raise _PYANNOTE_IMPORT_ERROR
+    try:
+        from pyannote.audio import Pipeline
+
+        return Pipeline
+    except Exception as exc:  # pragma: no cover - defensive: environment-specific import errors
+        _PYANNOTE_IMPORT_ERROR = exc
+        logging.warning(
+            "pyannote.audio import failed; diarization unavailable (%s). "
+            "Use diarization commands only on environments with a compatible torchaudio/pyannote install.",
+            exc,
+        )
+        raise
+
+
+def _import_pyannote_task_extras() -> Tuple[Any, Any, Any]:
+    try:
+        from pyannote.audio.core.task import (
+            Specifications as _PyannoteSpecifications,
+            Problem as _PyannoteProblem,
+            Resolution as _PyannoteResolution,
+        )
+
+        return _PyannoteSpecifications, _PyannoteProblem, _PyannoteResolution
+    except Exception:  # pragma: no cover - optional, not critical
+        return None, None, None
+
+
+def probe_pyannote_available() -> bool:
+    """
+    Best-effort probe to see if pyannote can be imported. Logs a warning instead
+    of crashing so help/Whisper-only commands still work on hosts without a
+    compatible torchaudio/pyannote build.
+    """
+    try:
+        _import_pyannote_pipeline()
+        return True
+    except Exception:
+        return False
+
+
+def load_pyannote(hf_token: Optional[str]) -> Any:
     """
     Load the pyannote diarization pipeline. Requires that the user accepted the
     HF terms for pyannote/speaker-diarization-3.1.
     """
     logging.info("Loading pyannote speaker-diarization-3.1 pipeline...")
+    try:
+        Pipeline = _import_pyannote_pipeline()
+    except Exception as exc:
+        fatal(
+            "pyannote is unavailable in this environment; diarization commands cannot run. "
+            "Install a compatible torchaudio/pyannote combo or run Whisper-only commands. "
+            f"Details: {exc}"
+        )
+
     extras = [torch.torch_version.TorchVersion]
+    _PyannoteSpecifications, _PyannoteProblem, _PyannoteResolution = _import_pyannote_task_extras()
     if _PyannoteSpecifications:
         extras.append(_PyannoteSpecifications)
     if _PyannoteProblem:
@@ -74,7 +125,7 @@ def load_pyannote(hf_token: Optional[str]) -> Pipeline:
         )
 
 
-def send_pipeline_to_device(pipeline: Pipeline, device: str) -> None:
+def send_pipeline_to_device(pipeline: Any, device: str) -> None:
     logging.info("Moving pyannote pipeline to '%s'...", device)
     try:
         pipeline.to(torch.device(device))
@@ -82,7 +133,7 @@ def send_pipeline_to_device(pipeline: Pipeline, device: str) -> None:
         fatal(f"Failed to move pyannote pipeline to '{device}': {exc}")
 
 
-def run_diarization(pipeline: Pipeline, wav_path: Path, diar_kwargs: Dict):
+def run_diarization(pipeline: Any, wav_path: Path, diar_kwargs: Dict):
     diar_kwargs = diar_kwargs or {}
     logging.info("Running diarization with kwargs: %s", diar_kwargs)
     try:
