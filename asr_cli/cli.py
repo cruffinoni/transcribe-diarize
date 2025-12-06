@@ -338,6 +338,8 @@ def _run_full_pipeline(
         "num_speakers_param": diar_kwargs.get("num_speakers"),
         "min_speakers_param": diar_kwargs.get("min_speakers"),
         "max_speakers_param": diar_kwargs.get("max_speakers"),
+        "hf_token": hf_token,
+        "interactive_speakers": interactive_speakers,
     }
 
     whisper_dev = whisper_infer.resolve_device(whisper_device)
@@ -402,6 +404,7 @@ def _run_full_pipeline(
         "num_speakers_param": diar_meta["num_speakers_param"],
         "min_speakers_param": diar_meta["min_speakers_param"],
         "max_speakers_param": diar_meta["max_speakers_param"],
+        "interactive_speakers": interactive_speakers,
         "language": language,
         "input_file": str(in_path),
         "duration": duration,
@@ -423,6 +426,12 @@ def _run_full_pipeline(
 @click.option("--num-speakers", type=int, default=None, help="Exact number of speakers (stored in cache for later diarization).")
 @click.option("--min-speakers", type=int, default=None, help="Minimum number of speakers (stored in cache for later diarization).")
 @click.option("--max-speakers", type=int, default=None, help="Maximum number of speakers (stored in cache for later diarization).")
+@click.option("--hf-token", type=str, default=None, help="HF token (stored in cache for later diarization).")
+@click.option(
+    "--interactive-speakers",
+    is_flag=True,
+    help="Remember to prompt to rename speakers when diarizing from this cache.",
+)
 @click.option("--language", type=str, default=None, help="Force language for Whisper (optional).")
 @click.option(
     "--out",
@@ -455,6 +464,8 @@ def transcribe(
     num_speakers: Optional[int],
     min_speakers: Optional[int],
     max_speakers: Optional[int],
+    hf_token: Optional[str],
+    interactive_speakers: bool,
     language: Optional[str],
     out: Optional[Path],
     cache_dir: Optional[Path],
@@ -463,6 +474,7 @@ def transcribe(
 ) -> None:
     """Run Whisper only and write the cache (no diarization)."""
     setup_logging(log_level)
+    hf_token = _resolve_hf_token(hf_token)
     try:
         cache_root = cache_dir or out
         _run_transcription_only(
@@ -472,6 +484,8 @@ def transcribe(
             num_speakers,
             min_speakers,
             max_speakers,
+            hf_token,
+            interactive_speakers,
             language,
             cache_root,
         )
@@ -490,6 +504,8 @@ def _run_transcription_only(
     num_speakers: Optional[int],
     min_speakers: Optional[int],
     max_speakers: Optional[int],
+    hf_token: Optional[str],
+    interactive_speakers: bool,
     language: Optional[str],
     cache_root: Optional[Path],
 ) -> None:
@@ -504,6 +520,8 @@ def _run_transcription_only(
         "num_speakers_param": diar_kwargs.get("num_speakers"),
         "min_speakers_param": diar_kwargs.get("min_speakers"),
         "max_speakers_param": diar_kwargs.get("max_speakers"),
+        "hf_token": hf_token,
+        "interactive_speakers": interactive_speakers,
     }
 
     with tempfile.TemporaryDirectory() as tmpd:
@@ -641,6 +659,11 @@ def _run_diarization_only(
         meta_max = cache_metadata.get("max_speakers_param")
         if any(v is not None for v in (meta_num, meta_min, meta_max)):
             diar_kwargs = _build_diar_kwargs(meta_num, meta_min, meta_max)
+    if not interactive_speakers:
+        interactive_speakers = bool(cache_metadata.get("interactive_speakers"))
+    if not hf_token:
+        hf_token = cache_metadata.get("hf_token")
+    hf_token = _resolve_hf_token(hf_token)
 
     audio_path = _resolve_cached_audio(audio_path_override, cache_metadata, cache_path)
     out_dir = _ensure_out_dir(out_dir, cache_path.parent)
@@ -663,13 +686,14 @@ def _run_diarization_only(
         speakers.apply_speaker_mapping(enriched, mapping)
 
     metadata = {
-        **cache_metadata,
+        **{k: v for k, v in cache_metadata.items() if k != "hf_token"},
         "diarization_model": "pyannote/speaker-diarization-3.1",
         "diar_device": str(diar_dev),
         "num_speakers_param": diar_kwargs.get("num_speakers"),
         "min_speakers_param": diar_kwargs.get("min_speakers"),
         "max_speakers_param": diar_kwargs.get("max_speakers"),
         "duration": cache_metadata.get("duration") or duration,
+        "interactive_speakers": interactive_speakers,
     }
     _export_outputs(enriched, diar, formats, out_dir, base_name, metadata)
     logging.info("Done. Outputs written to %s", out_dir)
