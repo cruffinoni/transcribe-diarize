@@ -79,6 +79,14 @@ def _ensure_out_dir(out_dir: Optional[Path], fallback: Path) -> Path:
     return resolved
 
 
+def _resolve_cache_dir(cache_root: Optional[Path], model: str, fingerprint: str) -> Path:
+    root = (cache_root or Path.home() / ".cache" / "asr-cli").expanduser().resolve()
+    model_tag = whisper_infer.safe_tag(model)
+    target = root / model_tag / fingerprint
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
 def _attach_speakers_to_segments(whisper_segments, diarization_result) -> List[Dict]:
     enriched = []
     for seg in whisper_segments:
@@ -229,6 +237,18 @@ def cli() -> None:
     help="Comma-separated output formats: srt,txt,json,rttm,dialog",
 )
 @click.option(
+    "--cache",
+    "cache_enable",
+    is_flag=True,
+    help="Also store Whisper cache under a cache directory (default: ~/.cache/asr-cli/<model>/<fingerprint>).",
+)
+@click.option(
+    "--cache-dir",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    default=None,
+    help="Root directory for Whisper cache; implies --cache.",
+)
+@click.option(
     "--interactive-speakers",
     is_flag=True,
     help="Prompt to rename speakers after diarization.",
@@ -257,6 +277,8 @@ def full(
     hf_token: Optional[str],
     out: Optional[Path],
     format_: str,
+    cache_enable: bool,
+    cache_dir: Optional[Path],
     interactive_speakers: bool,
     log_level: str,
     debug: bool,
@@ -277,6 +299,8 @@ def full(
             hf_token,
             out,
             format_,
+            cache_enable or cache_dir is not None,
+            cache_dir,
             interactive_speakers,
         )
     except SystemExit:
@@ -299,6 +323,8 @@ def _run_full_pipeline(
     hf_token: Optional[str],
     out_dir: Optional[Path],
     formats_raw: str,
+    cache_enable: bool,
+    cache_root: Optional[Path],
     interactive_speakers: bool,
 ) -> None:
     in_path = input_path.expanduser().resolve()
@@ -324,6 +350,7 @@ def _run_full_pipeline(
             wres = whisper_infer.run_whisper(w_model, wav_path, language)
         w_segments = wres.get("segments", [])
         duration = _duration_from_segments(w_segments)
+        fingerprint = whisper_infer.fingerprint_file(wav_path)
 
         with step_status("Loading diarization pipeline", spinner=False):
             pipeline = diarization.load_pyannote(hf_token)
@@ -342,6 +369,18 @@ def _run_full_pipeline(
             language,
             source_path=in_path,
         )
+        if cache_enable or cache_root is not None:
+            cache_dir = _resolve_cache_dir(cache_root, model, fingerprint)
+            whisper_infer.export_whisper_cache(
+                wres,
+                wav_path,
+                cache_dir,
+                base_name,
+                model,
+                whisper_dev,
+                language,
+                source_path=in_path,
+            )
 
     enriched = _attach_speakers_to_segments(w_segments, diar)
     if interactive_speakers and enriched:
@@ -382,6 +421,12 @@ def _run_full_pipeline(
     help="Output directory (default: same as input file).",
 )
 @click.option(
+    "--cache-dir",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    default=None,
+    help="Root directory for Whisper cache (default: ~/.cache/asr-cli/<model>/<fingerprint>).",
+)
+@click.option(
     "--log-level",
     default="INFO",
     show_default=True,
@@ -399,13 +444,15 @@ def transcribe(
     whisper_device: str,
     language: Optional[str],
     out: Optional[Path],
+    cache_dir: Optional[Path],
     log_level: str,
     debug: bool,
 ) -> None:
     """Run Whisper only and write the cache (no diarization)."""
     setup_logging(log_level)
     try:
-        _run_transcription_only(input, model, whisper_device, language, out)
+        cache_root = cache_dir or out
+        _run_transcription_only(input, model, whisper_device, language, cache_root)
     except SystemExit:
         raise
     except Exception as exc:  # pragma: no cover - defensive
@@ -419,12 +466,13 @@ def _run_transcription_only(
     model: str,
     whisper_device: str,
     language: Optional[str],
-    out_dir: Optional[Path],
+    cache_root: Optional[Path],
 ) -> None:
     in_path = input_path.expanduser().resolve()
     if not in_path.exists():
         fatal(f"Input not found: {in_path}")
-    out_dir = _ensure_out_dir(out_dir, in_path.parent)
+    fallback = Path.home() / ".cache" / "asr-cli"
+    cache_root = (cache_root or fallback).expanduser().resolve()
     whisper_dev = whisper_infer.resolve_device(whisper_device)
 
     with tempfile.TemporaryDirectory() as tmpd:
@@ -436,17 +484,19 @@ def _run_transcription_only(
             w_model = whisper_infer.load_whisper(model, whisper_dev)
         with step_status("Running Whisper transcription", spinner=False):
             wres = whisper_infer.run_whisper(w_model, wav_path, language)
+        fingerprint = whisper_infer.fingerprint_file(wav_path)
+        cache_dir = _resolve_cache_dir(cache_root, model, fingerprint)
         whisper_infer.export_whisper_cache(
             wres,
             wav_path,
-            out_dir,
+            cache_dir,
             in_path.stem,
             model,
             whisper_dev,
             language,
             source_path=in_path,
         )
-    logging.info("Whisper cache written to %s", out_dir)
+    logging.info("Whisper cache written to %s", cache_dir)
 
 
 @cli.command()

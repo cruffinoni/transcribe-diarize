@@ -75,6 +75,16 @@ def _safe_tag(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", value)
 
 
+def fingerprint_file(path: Path) -> str:
+    """Public wrapper for computing a deterministic fingerprint."""
+    return _fingerprint_file(path)
+
+
+def safe_tag(value: str) -> str:
+    """Public wrapper to sanitize user-provided strings for filenames."""
+    return _safe_tag(value)
+
+
 def export_whisper_cache(
     whisper_result: Dict,
     wav_path: Path,
