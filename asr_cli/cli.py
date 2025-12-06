@@ -80,7 +80,7 @@ def _ensure_out_dir(out_dir: Optional[Path], fallback: Path) -> Path:
 
 
 def _resolve_cache_dir(cache_root: Optional[Path], model: str, fingerprint: str) -> Path:
-    root = (cache_root or Path.home() / ".cache" / "asr-cli").expanduser().resolve()
+    root = (cache_root or Path.home() / ".cache" / "asr").expanduser().resolve()
     model_tag = whisper_infer.safe_tag(model)
     target = root / model_tag / fingerprint
     target.mkdir(parents=True, exist_ok=True)
@@ -240,13 +240,13 @@ def cli() -> None:
     "--cache",
     "cache_enable",
     is_flag=True,
-    help="Also store Whisper cache under a cache directory (default: ~/.cache/asr-cli/<model>/<fingerprint>).",
+    help="Also store Whisper cache under a cache directory (default: ~/.cache/asr/<model>/<fingerprint>).",
 )
 @click.option(
     "--cache-dir",
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     default=None,
-    help="Root directory for Whisper cache; implies --cache.",
+    help="Root directory for Whisper cache; implies --cache (default root: ~/.cache/asr/<model>/<fingerprint>).",
 )
 @click.option(
     "--interactive-speakers",
@@ -471,7 +471,7 @@ def _run_transcription_only(
     in_path = input_path.expanduser().resolve()
     if not in_path.exists():
         fatal(f"Input not found: {in_path}")
-    fallback = Path.home() / ".cache" / "asr-cli"
+    fallback = Path.home() / ".cache" / "asr"
     cache_root = (cache_root or fallback).expanduser().resolve()
     whisper_dev = whisper_infer.resolve_device(whisper_device)
 
@@ -742,7 +742,7 @@ def cache_info(whisper_cache: Path, log_level: str) -> None:
 
 def main(argv: Optional[List[str]] = None) -> None:
     load_dotenv(override=False)
-    cli.main(args=argv, prog_name="transcribe_diarize")
+    cli.main(args=argv, prog_name="asr")
 
 
 if __name__ == "__main__":

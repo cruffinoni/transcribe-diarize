@@ -22,3 +22,6 @@ test-out*.txt
 
 # pytest cache
 .pytest_cache/
+# macOS
+
+.DS_Store

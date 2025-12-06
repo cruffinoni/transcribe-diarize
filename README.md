@@ -1,4 +1,4 @@
-# transcribe_diarize
+# asr
 
 CLI tool for end-to-end transcription and speaker diarization using OpenAI Whisper and `pyannote/speaker-diarization-3.1`. It extracts mono 16k WAV audio with `ffmpeg`, runs Whisper, diarizes speakers, and writes SRT/TXT/JSON/RTTM/dialog outputs.
 
@@ -30,26 +30,26 @@ While running, the CLI shows progress for each step (audio extraction, Whisper l
 ## Quickstart
 macOS / Apple Silicon (auto uses MPS when available):
 ```bash
-transcribe_diarize input.mp4 --model medium --hf-token "$HF_TOKEN" --format srt,json,dialog
+asr full input.mp4 --model medium --hf-token "$HF_TOKEN" --format srt,json,dialog
 ```
 
 Linux / WSL2 with CUDA:
 ```bash
-transcribe_diarize input.mp4 --model large-v2 --whisper-device auto --diar-device auto \
+asr full input.mp4 --model large-v2 --whisper-device auto --diar-device auto \
   --num-speakers 2 --hf-token "$HF_TOKEN" --format srt,json,dialog
 ```
 
 CPU-only:
 ```bash
-transcribe_diarize input.wav --model tiny --whisper-device cpu --diar-device cpu
+asr full input.wav --model tiny --whisper-device cpu --diar-device cpu
 ```
 
 Interactive speaker naming:
 ```bash
-transcribe_diarize input.mp4 --hf-token "$HF_TOKEN" --interactive-speakers
+asr full input.mp4 --hf-token "$HF_TOKEN" --interactive-speakers
 ```
 
-Outputs are written next to the input by default; override with `--out DIR`. Choose formats with `--format srt,txt,json,rttm,dialog`.
+Outputs are written next to the input by default; override with `--out DIR`. Choose formats with `--format srt,txt,json,rttm,dialog`. Whisper caches default to `~/.cache/asr/<model>/<fingerprint>`; override with `--cache-dir`.
 
 ## Devices
 - `--whisper-device/--diar-device`: `auto` (default) prefers CUDA, then MPS, else CPU.

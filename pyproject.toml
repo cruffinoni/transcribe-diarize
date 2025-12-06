@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "asr-cli"
+name = "asr"
 version = "0.1.0"
 description = "CLI for Whisper transcription with pyannote diarization."
 readme = "README.md"
@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-transcribe_diarize = "asr_cli.cli:main"
+asr = "asr_cli.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["asr_cli"]
