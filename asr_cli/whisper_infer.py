@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import whisper
 
@@ -94,6 +94,7 @@ def export_whisper_cache(
     device: str,
     language: Optional[str],
     source_path: Optional[Path] = None,
+    extra_metadata: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Path, Path, str]:
     """
     Persist Whisper output and the normalized audio alongside a fingerprint.
@@ -121,6 +122,8 @@ def export_whisper_cache(
     }
     if source_path:
         payload["metadata"]["input_file"] = str(source_path)
+    if extra_metadata:
+        payload["metadata"].update(extra_metadata)
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 

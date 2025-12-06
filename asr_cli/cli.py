@@ -334,6 +334,11 @@ def _run_full_pipeline(
     out_dir = _ensure_out_dir(out_dir, in_path.parent)
     formats = parse_formats(formats_raw)
     diar_kwargs = _build_diar_kwargs(num_speakers, min_speakers, max_speakers)
+    diar_meta = {
+        "num_speakers_param": diar_kwargs.get("num_speakers"),
+        "min_speakers_param": diar_kwargs.get("min_speakers"),
+        "max_speakers_param": diar_kwargs.get("max_speakers"),
+    }
 
     whisper_dev = whisper_infer.resolve_device(whisper_device)
     diar_dev = diarization.resolve_device(diar_device)
@@ -368,6 +373,7 @@ def _run_full_pipeline(
             whisper_dev,
             language,
             source_path=in_path,
+            extra_metadata=diar_meta,
         )
         if cache_enable or cache_root is not None:
             cache_dir = _resolve_cache_dir(cache_root, model, fingerprint)
@@ -380,6 +386,7 @@ def _run_full_pipeline(
                 whisper_dev,
                 language,
                 source_path=in_path,
+                extra_metadata=diar_meta,
             )
 
     enriched = _attach_speakers_to_segments(w_segments, diar)
@@ -392,9 +399,9 @@ def _run_full_pipeline(
         "whisper_device": str(whisper_dev),
         "diarization_model": "pyannote/speaker-diarization-3.1",
         "diar_device": str(diar_dev),
-        "num_speakers_param": num_speakers,
-        "min_speakers_param": min_speakers,
-        "max_speakers_param": max_speakers,
+        "num_speakers_param": diar_meta["num_speakers_param"],
+        "min_speakers_param": diar_meta["min_speakers_param"],
+        "max_speakers_param": diar_meta["max_speakers_param"],
         "language": language,
         "input_file": str(in_path),
         "duration": duration,
@@ -413,6 +420,9 @@ def _run_full_pipeline(
     show_default=True,
     help="Device for Whisper.",
 )
+@click.option("--num-speakers", type=int, default=None, help="Exact number of speakers (stored in cache for later diarization).")
+@click.option("--min-speakers", type=int, default=None, help="Minimum number of speakers (stored in cache for later diarization).")
+@click.option("--max-speakers", type=int, default=None, help="Maximum number of speakers (stored in cache for later diarization).")
 @click.option("--language", type=str, default=None, help="Force language for Whisper (optional).")
 @click.option(
     "--out",
@@ -442,6 +452,9 @@ def transcribe(
     input: Path,
     model: str,
     whisper_device: str,
+    num_speakers: Optional[int],
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
     language: Optional[str],
     out: Optional[Path],
     cache_dir: Optional[Path],
@@ -452,7 +465,16 @@ def transcribe(
     setup_logging(log_level)
     try:
         cache_root = cache_dir or out
-        _run_transcription_only(input, model, whisper_device, language, cache_root)
+        _run_transcription_only(
+            input,
+            model,
+            whisper_device,
+            num_speakers,
+            min_speakers,
+            max_speakers,
+            language,
+            cache_root,
+        )
     except SystemExit:
         raise
     except Exception as exc:  # pragma: no cover - defensive
@@ -465,6 +487,9 @@ def _run_transcription_only(
     input_path: Path,
     model: str,
     whisper_device: str,
+    num_speakers: Optional[int],
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
     language: Optional[str],
     cache_root: Optional[Path],
 ) -> None:
@@ -474,6 +499,12 @@ def _run_transcription_only(
     fallback = Path.home() / ".cache" / "asr-mps"
     cache_root = (cache_root or fallback).expanduser().resolve()
     whisper_dev = whisper_infer.resolve_device(whisper_device)
+    diar_kwargs = _build_diar_kwargs(num_speakers, min_speakers, max_speakers)
+    diar_meta = {
+        "num_speakers_param": diar_kwargs.get("num_speakers"),
+        "min_speakers_param": diar_kwargs.get("min_speakers"),
+        "max_speakers_param": diar_kwargs.get("max_speakers"),
+    }
 
     with tempfile.TemporaryDirectory() as tmpd:
         wav_path = Path(tmpd) / "audio_16k.wav"
@@ -495,6 +526,7 @@ def _run_transcription_only(
             whisper_dev,
             language,
             source_path=in_path,
+            extra_metadata=diar_meta,
         )
     logging.info("Whisper cache written to %s", cache_dir)
 
@@ -603,6 +635,12 @@ def _run_diarization_only(
     wres, cache_metadata = _load_whisper_cache(cache_path)
     formats = parse_formats(formats_raw)
     diar_kwargs = _build_diar_kwargs(num_speakers, min_speakers, max_speakers)
+    if not diar_kwargs:
+        meta_num = cache_metadata.get("num_speakers_param")
+        meta_min = cache_metadata.get("min_speakers_param")
+        meta_max = cache_metadata.get("max_speakers_param")
+        if any(v is not None for v in (meta_num, meta_min, meta_max)):
+            diar_kwargs = _build_diar_kwargs(meta_num, meta_min, meta_max)
 
     audio_path = _resolve_cached_audio(audio_path_override, cache_metadata, cache_path)
     out_dir = _ensure_out_dir(out_dir, cache_path.parent)
@@ -628,9 +666,9 @@ def _run_diarization_only(
         **cache_metadata,
         "diarization_model": "pyannote/speaker-diarization-3.1",
         "diar_device": str(diar_dev),
-        "num_speakers_param": num_speakers,
-        "min_speakers_param": min_speakers,
-        "max_speakers_param": max_speakers,
+        "num_speakers_param": diar_kwargs.get("num_speakers"),
+        "min_speakers_param": diar_kwargs.get("min_speakers"),
+        "max_speakers_param": diar_kwargs.get("max_speakers"),
         "duration": cache_metadata.get("duration") or duration,
     }
     _export_outputs(enriched, diar, formats, out_dir, base_name, metadata)
