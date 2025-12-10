@@ -82,7 +82,9 @@ def _ensure_out_dir(out_dir: Optional[Path], fallback: Path) -> Path:
 def _resolve_cache_dir(cache_root: Optional[Path], model: str, fingerprint: str) -> Path:
     root = (cache_root or Path.home() / ".cache" / "asr-mps").expanduser().resolve()
     model_tag = whisper_infer.safe_tag(model)
-    target = root / model_tag / fingerprint
+    # Keep cache directories short (match file names) by truncating the fingerprint.
+    short_fp = fingerprint[:12]
+    target = root / model_tag / short_fp
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -650,6 +652,7 @@ def _run_diarization_only(
     interactive_speakers: bool,
 ) -> None:
     cache_path = whisper_cache.expanduser().resolve()
+    logging.info("Using Whisper cache: %s", cache_path)
     wres, cache_metadata = _load_whisper_cache(cache_path)
     formats = parse_formats(formats_raw)
     diar_kwargs = _build_diar_kwargs(num_speakers, min_speakers, max_speakers)
@@ -666,6 +669,7 @@ def _run_diarization_only(
     hf_token = _resolve_hf_token(hf_token)
 
     audio_path = _resolve_cached_audio(audio_path_override, cache_metadata, cache_path)
+    logging.info("Using audio: %s", audio_path)
     out_dir = _ensure_out_dir(out_dir, cache_path.parent)
     base_name = _base_name_from_metadata(cache_path, cache_metadata, audio_path)
 
