@@ -85,6 +85,42 @@ def safe_tag(value: str) -> str:
     return _safe_tag(value)
 
 
+_MODEL_RTF = {
+    "tiny": 0.35,
+    "base": 0.6,
+    "small": 0.9,
+    "medium": 1.6,
+    "large": 2.6,
+}
+_DEVICE_MULTIPLIER = {
+    "cpu": 1.0,
+    "mps": 0.7,
+    "cuda": 0.4,
+}
+
+
+def _normalize_model_key(model_name: str) -> str:
+    name = (model_name or "").lower().strip()
+    if name.endswith(".en"):
+        name = name[: -len(".en")]
+    if name.startswith("large"):
+        return "large"
+    for key in _MODEL_RTF:
+        if name == key:
+            return key
+    return name
+
+
+def estimate_transcription_seconds(model_name: str, device: str, audio_seconds: float) -> Optional[float]:
+    if audio_seconds <= 0:
+        return None
+    model_key = _normalize_model_key(model_name)
+    rtf = _MODEL_RTF.get(model_key, 1.2)
+    dev_key = (device or "cpu").split(":")[0].lower()
+    multiplier = _DEVICE_MULTIPLIER.get(dev_key, 1.0)
+    return audio_seconds * rtf * multiplier
+
+
 def export_whisper_cache(
     whisper_result: Dict,
     wav_path: Path,

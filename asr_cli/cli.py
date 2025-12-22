@@ -10,7 +10,7 @@ import click
 from dotenv import load_dotenv
 
 from . import audio, diarization, export, speakers, whisper_infer
-from .utils import fatal, setup_logging, step_status
+from .utils import fatal, format_duration, setup_logging, step_status
 
 
 VALID_FORMATS: Set[str] = {"srt", "txt", "json", "rttm", "dialog"}
@@ -355,6 +355,16 @@ def _run_full_pipeline(
 
         with step_status(f"Loading Whisper model '{model}' on {whisper_dev}", spinner=False):
             w_model = whisper_infer.load_whisper(model, whisper_dev)
+        audio_seconds = audio.wav_duration_seconds(wav_path)
+        eta_seconds = whisper_infer.estimate_transcription_seconds(model, whisper_dev, audio_seconds)
+        if eta_seconds is not None:
+            logging.info(
+                "Estimated Whisper time: ~%s (audio %s, model %s on %s)",
+                format_duration(eta_seconds),
+                format_duration(audio_seconds),
+                model,
+                whisper_dev,
+            )
         with step_status("Running Whisper transcription", spinner=False):
             wres = whisper_infer.run_whisper(w_model, wav_path, language)
         w_segments = wres.get("segments", [])
@@ -533,6 +543,16 @@ def _run_transcription_only(
 
         with step_status(f"Loading Whisper model '{model}' on {whisper_dev}", spinner=False):
             w_model = whisper_infer.load_whisper(model, whisper_dev)
+        audio_seconds = audio.wav_duration_seconds(wav_path)
+        eta_seconds = whisper_infer.estimate_transcription_seconds(model, whisper_dev, audio_seconds)
+        if eta_seconds is not None:
+            logging.info(
+                "Estimated Whisper time: ~%s (audio %s, model %s on %s)",
+                format_duration(eta_seconds),
+                format_duration(audio_seconds),
+                model,
+                whisper_dev,
+            )
         with step_status("Running Whisper transcription", spinner=False):
             wres = whisper_infer.run_whisper(w_model, wav_path, language)
         fingerprint = whisper_infer.fingerprint_file(wav_path)
